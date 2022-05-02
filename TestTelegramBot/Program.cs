@@ -1,4 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
+using Serilog;
+using Serilog.Formatting.Json;
 using System.Reflection;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -14,19 +16,49 @@ namespace TestTelegramBot
     public class Program
     {
         public static string appSettingsFileName = "appsettings.json";
+        public static string jannaPhrasesFileName = "JannaPhrases.json";
         private static IConfiguration _config;
         private static TelegramBotClient Bot;
         private const string jannaFolderName = "JannaMessages";
         public static async Task Main(string[] args)
         {
-            BuildConfiguration();
-            await StartBot();
+            using var log = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .WriteTo.Console()
+                .WriteTo.File(
+                new JsonFormatter(),
+                        "./SLogs/SLog-.log",
+                        encoding: System.Text.Encoding.UTF8,
+                        buffered: true,
+                        shared: false,
+                        rollingInterval: RollingInterval.Day,
+                        flushToDiskInterval: TimeSpan.FromSeconds(600),
+                        fileSizeLimitBytes: 500000,
+                        rollOnFileSizeLimit: true,
+                        retainedFileCountLimit: 50)
+                .CreateLogger();
+            Log.Logger = log;
+            try
+            {
+                BuildConfiguration();
+                await StartBot();
+                log.Information("The program finished");
+            }
+            catch (Exception ex)
+            {
+                log.Fatal(ex, "The program has dropped");
+            }
+            finally
+            {
+                log?.Dispose();
+            }            
         }
 
         public static void BuildConfiguration()
         {
             var builder = new ConfigurationBuilder()
-                .AddJsonFile(appSettingsFileName);
+                .AddJsonFile(appSettingsFileName)
+                .AddJsonFile(jannaPhrasesFileName);
             _config = builder.Build();            
         }
 
@@ -46,7 +78,13 @@ namespace TestTelegramBot
             };
             Bot.StartReceiving(HandleUpdateAsync, HandleErrorAsync, receiverOptions,
                                 cts.Token);
-            Console.ReadLine();
+            while (true)
+            {
+                if (Console.ReadLine() == "stop")
+                    break;
+                else
+                    Thread.Sleep(100);
+            }
             cts.Cancel();
         }
 
@@ -86,11 +124,11 @@ namespace TestTelegramBot
             var action = (message.Text.ToLower()) switch
             {
                 "/start" => SendMessage(message, "Hello!"),
-                "/help" => SendMessage(message, "Known commands: \r\nJanna\r\nЖанна"),
+                "/help" => SendMessage(message, "Known commands: \r\nJanna\r\nЖанночка"),
                 "janna" => JannaPhrase(message),
-                "жанна" => JannaPhrase(message),
+                "жанночка" => JannaPhrase(message),
 
-                _ => SendMessage(message, "unknown command")
+                //_ => SendMessage(message, "unknown command")
             };
             if (action is null)
             {
@@ -126,13 +164,15 @@ namespace TestTelegramBot
 
         public static async Task<Message> JannaPhrase(Message message)
         {
-            string pathToFolder = Path.Combine(
-                Path.GetDirectoryName(Assembly.GetEntryAssembly().Location),
-                jannaFolderName);
-            string[] messages = Directory.GetFiles(pathToFolder);
+            //string pathToFolder = Path.Combine(
+            //    Path.GetDirectoryName(Assembly.GetEntryAssembly().Location),
+            //    jannaFolderName);
+            //string[] messages = Directory.GetFiles(pathToFolder);
             Random random = new Random();
-            FileInfo fileInfo = new FileInfo(messages[random.Next(messages.Length)]);
-            return await SendImageMessage(message, fileInfo.Name, fileInfo.OpenRead());
+            //FileInfo fileInfo = new FileInfo(messages[random.Next(messages.Length)]);
+            //return await SendImageMessage(message, fileInfo.Name, fileInfo.OpenRead());
+            var phrases = _config.GetSection("JannaPhrases").Get<List<string>>();
+            return await SendMessage(message, phrases[random.Next(phrases.Count - 1)]);
         }
 
         public static async Task<Message> SendImageMessage(Message message, string fileName, Stream stream)
