@@ -243,12 +243,14 @@ namespace TestTelegramBot
                 try
                 {
                     whisperArguments.AudioFileName =  filePath;
-                    
-                    var result = await whisperWrapper.ExecuteCliCommandAsync(whisperArguments, cancellationTokenSource.Token);
-                    var processedResponse = ProcessWhisperAnswer(result);
-                    if(!string.IsNullOrEmpty(processedResponse))
+
+                    //var result = await whisperWrapper.ExecuteCliCommandAsync(whisperArguments, cancellationTokenSource.Token);
+                    var whisperWeb = new WhisperWeb();
+                    var result = await whisperWeb.SendPostRequestAsync(filePath);
+                    //var processedResponse = ProcessWhisperAnswer(result);
+                    if(!string.IsNullOrEmpty(result))
                     {
-                        await botClient.SendTextMessageAsync(message.Chat.Id, processedResponse, replyToMessageId: message.MessageId);
+                        await botClient.SendTextMessageAsync(message.Chat.Id, result, replyToMessageId: message.MessageId);
                     }
                     else
                     {
